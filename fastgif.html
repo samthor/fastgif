@@ -1,0 +1,148 @@
+<!DOCTYPE html>
+<script src="https://cdn.rawgit.com/matt-way/gifuct-js/de68974e/dist/gifuct-js.min.js"></script>
+<script>
+  window.gifuctLib = window.GIF;
+</script>
+<script src="https://cdn.rawgit.com/friendlyanon/gif-engine-js/9c59e055/gif-engine-js.js"></script>
+<script>
+  window.gifEngineLib = GIF;  // not on window, defined via 'const'
+</script>
+<script src="https://cdn.rawgit.com/buzzfeed/libgif-js/0654e7f2/libgif.js"></script>
+<script type="module">
+
+import * as fastgif from './fastgif.js';
+
+if (!window.WebAssembly) {
+  document.body.innerHTML = `<h1>This demo won't work, your browser doesn't have WebAssembly :(</h1>`;
+  throw new Error();
+}
+
+fastgif.setDebug();
+
+function fetchToBuffer(url) {
+  return window.fetch(url).then((response) => response.arrayBuffer());
+}
+
+async function render(all, label) {
+  const canvas = document.createElement('canvas');
+  if (all.length === 0) {
+    throw new Error('can\'t play image with no frames');
+  }
+  canvas.width = all[0].imageData.width;
+  canvas.height = all[0].imageData.height;
+
+  const heading = document.createElement('h1');
+  heading.textContent = label;
+  document.body.appendChild(heading);
+  document.body.appendChild(canvas);
+
+  const ctx = canvas.getContext('2d');
+
+  let frame = 0;
+  while (true) {
+    ctx.putImageData(all[frame].imageData, 0, 0);
+    await new Promise((resolve) => window.setTimeout(resolve, all[frame].delay));
+
+    if (++frame === all.length) {
+      frame = 0;
+    }
+  }
+}
+
+async function run() {
+  const buf = await fetchToBuffer('large.gif');
+
+  const times = {};
+  const log = async (method, fn) => {
+    const start = performance.now();
+    const out = await fn();
+    const duration = performance.now() - start;
+    times[method] = duration;
+    return out;
+  };
+
+  // gifengine
+  const gifEngineFrames = await log('gifEngine', async () => {
+    console.time('gifEngine-new');
+    const gifEngine = await gifEngineLib(buf);
+    console.timeEnd('gifEngine-new');
+    console.time('gifEngine-frames');
+    const promiseFrames = gifEngine.frames.map((_, i) => gifEngine.toImageData(i));
+    const out = (await Promise.all(promiseFrames)).map((raw, i) => {
+      return {
+        imageData: raw[0],
+        delay: gifEngine.frames[i].graphicExtension.delay,
+      };
+    });
+    console.timeEnd('gifEngine-frames');
+    return out;
+  });
+
+  // wasm
+  const wasmFrames = await log('wasm', async () => {
+    const wasmDecoder = new fastgif.Decoder();
+    return await wasmDecoder.decode(buf);
+  });
+
+  // gifuct
+  const gifuctFrames = await log('gifuct', async () => {
+    console.time('gifuct-new')
+    const gifuct = new gifuctLib(buf);
+    console.timeEnd('gifuct-new')
+    console.time('gifuct-frames');
+    const gifuctRaw = gifuct.decompressFrames(true);
+    const out = gifuctRaw.map((raw) => {
+      return {
+        imageData: new ImageData(raw.patch, raw.dims.width, raw.dims.height),
+        delay: raw.delay,
+      };
+    });
+    console.timeEnd('gifuct-frames');
+    return out;
+  });
+
+  // SuperGif
+  await log('supergif', async () => {
+    const supergif = new SuperGif({gif: supergifHolder, draw_while_loading: false});
+    console.time('supergif');
+    await new Promise((resolve) => {
+      supergif.load_url('large.gif', resolve);
+    });
+    const heading = document.createElement('h1');
+    heading.textContent = 'supergif';
+    const supergifCanvas = supergif.get_canvas();
+    supergifCanvas.parentNode.insertBefore(heading, supergifCanvas);
+    console.timeEnd('supergif');
+  });
+
+  // log stats at top
+  stats.textContent = '';
+  for (const key in times) {
+    const li = document.createElement('li');
+    const v = new Number(times[key]).toFixed(2);
+    li.textContent = `${key}: ${v}ms`;
+    li.style.order = Math.round(times[key] * 100);
+    stats.appendChild(li);
+  }
+
+  // render all
+  return Promise.race([
+    render(wasmFrames, 'wasm'),
+    render(gifEngineFrames, 'gifEngine'),
+    render(gifuctFrames, 'gifuct'),
+  ]);
+}
+
+run().catch((err) => console.error(err));
+
+</script>
+<style>
+  #stats {
+    display: flex;
+    flex-flow: column;
+    list-style: none;
+    margin: 0;
+  }
+</style>
+<ul id="stats">Working...</ul>
+<span id="supergifHolder"></span>
