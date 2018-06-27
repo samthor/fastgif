@@ -8,16 +8,28 @@
   window.gifEngineLib = GIF;  // not on window, defined via 'const'
 </script>
 <script src="https://cdn.rawgit.com/buzzfeed/libgif-js/0654e7f2/libgif.js"></script>
+<script>
+  function globalError(msg) {
+    var el = document.createElement('h1');
+    document.body.appendChild(el);
+    el.style.color = 'red';
+    el.textContent = msg;
+    throw new Error();
+  }
+</script>
+<script nomodule>
+
+globalErr('Your browser doesn\'t have modules!')
+
+</script>
 <script type="module">
 
 import * as fastgif from './fastgif.js';
+fastgif.setDebug();
 
 if (!window.WebAssembly) {
-  document.body.innerHTML = `<h1>This demo won't work, your browser doesn't have WebAssembly :(</h1>`;
-  throw new Error();
+  globalErr('Your browser doesn\'t have WebAssembly!')
 }
-
-fastgif.setDebug();
 
 function fetchToBuffer(url) {
   return window.fetch(url).then((response) => response.arrayBuffer());
@@ -62,7 +74,7 @@ async function run() {
   };
 
   // gifengine
-  const gifEngineFrames = await log('gifEngine', async () => {
+  const gifEngineFrames = await log('gif-engine-js', async () => {
     console.time('gifEngine-new');
     const gifEngine = await gifEngineLib(buf);
     console.timeEnd('gifEngine-new');
@@ -128,7 +140,7 @@ async function run() {
   // render all
   return Promise.race([
     render(wasmFrames, 'wasm'),
-    render(gifEngineFrames, 'gifEngine'),
+    render(gifEngineFrames, 'gif-engine-js'),
     render(gifuctFrames, 'gifuct'),
   ]);
 }
