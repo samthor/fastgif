@@ -1,0 +1,122 @@
+<!DOCTYPE html>
+<html>
+<head>
+<script>
+
+async function createWebAssembly(path, importObject) {
+  const bytes = await window.fetch(path).then((response) => response.arrayBuffer());
+  return WebAssembly.instantiate(bytes, importObject);
+}
+
+const memory = new WebAssembly.Memory({initial: 256, maximum: 256});
+const view = new Uint8Array(memory.buffer);
+let exports = null;
+
+async function init(oninit, onframe) {
+  const u32view = new Uint32Array(memory.buffer);
+  u32view[7824 >> 2] = 5250720;
+  
+  let mallocAt = 0;
+  const env = {
+    ABORT: 0,
+    DYNAMICTOP_PTR: 7824,  // this is the pointer to where the top of heap is
+    STACKTOP: 7840,
+    STACK_MAX: 5250720,
+    abort() { throw new Error('abort'); },
+    abortOnCannotGrowMemory() { throw new Error('abortOnCannotGrowMemory'); },
+    enlargeMemory() { throw new Error('enlargeMemory unsupported'); },
+    getTotalMemory() { return view.length; },
+    ___setErrNo(v) { console.warn('err', v); },
+    _emscripten_memcpy_big(dst, src, num) {
+      view.set(view.subarray(src, src + num), dst);
+      return dst;
+    },
+    memory: memory,
+    memoryBase: 1024,
+    table: new WebAssembly.Table({initial: 2, maximum: 2, element: 'anyfunc'}),
+    tableBase: 0,
+
+    _oninit: oninit,
+    _onframe: onframe,
+  };
+
+  const importObject = {env};
+
+  const wa = await createWebAssembly('gifplayer.wasm', importObject);
+  exports = wa.instance.exports;
+  console.info('loaded, got exports', exports);
+}
+
+const u32view = new Uint32Array(memory.buffer);
+
+let info = null;
+const frames = [];
+const decoder = new TextDecoder();
+function onframe(micros) {
+  const buf = new Uint32Array(info.len);
+  buf.set(u32view.subarray(info.ptr, info.ptr + info.len));
+  frames.push({buf, ms: micros / 1000});
+}
+function oninit(ptr, width, height) {
+  const len = width * height;
+  info = {ptr: ptr/4, width, height, len};
+}
+
+function draw(buf) {
+  const ctx = canvas.getContext('2d');
+  const id = new ImageData(new Uint8ClampedArray(buf.buffer), info.width, info.height);
+  ctx.putImageData(id, 0, 0);
+}
+
+function readString(at) {
+  const v = view.slice(at);
+  let i;
+  for (i = 0; i < v.length; ++i) {
+    if (v[i] === 0) {
+      break;
+    }
+  }
+  return decoder.decode(v.slice(0, i));
+}
+
+const p = init(oninit, onframe).catch((err) => console.error(err));
+
+</script>
+<script>
+
+  async function runner() {
+    console.time('fetch');
+    const buffer = await window.fetch('large.gif').then((response) => response.arrayBuffer());
+    const buf = new Uint8Array(buffer);
+    const at = exports._malloc(buf.length);
+    view.set(buf, at);
+    // console.info(buf);
+    // console.info('put data at', at, 'len', buf.length);
+    console.info('passing', at, buf.length);
+    exports._read_buffer(at, buf.length);
+    console.timeEnd('fetch');
+    console.time('play');
+    const out = exports._play();
+    console.timeEnd('play');
+
+    console.time('rotate');
+    const len = info.len * 4;
+    frames.forEach((frame) => {
+      const buf = new Uint8ClampedArray(frame.buf.buffer);
+      for (let i = 0; i < len; i += 4) {
+        const tmp = buf[i];
+        buf[i] = buf[i+2];
+        buf[i+2] = tmp;
+      }
+    });
+    console.timeEnd('rotate');
+
+    return {s: readString(out), out};
+  }
+
+</script>
+</head>
+<body>
+<canvas id="canvas" width="640" height="480"></canvas>
+</body>
+</html>
