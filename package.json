@@ -1,0 +1,21 @@
+{
+  "name": "fastgif",
+  "version": "0.1.0",
+  "description": "fastgif, fast Web Assembly GIF decoder based on Wuffs",
+  "module": "pwacompat.js",
+  "jsnext:main": "pwacompat.js",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/samthor/fastgif.git"
+  },
+  "keywords": [
+    "gif",
+    "wasm"
+  ],
+  "author": "Sam Thorogood",
+  "license": "Apache-2.0",
+  "bugs": {
+    "url": "https://github.com/samthor/fastgif/issues"
+  },
+  "homepage": "https://github.com/samthor/fastgif#readme"
+}
