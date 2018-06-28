@@ -62,7 +62,7 @@ async function render(all, label) {
 }
 
 async function run() {
-  const buf = await fetchToBuffer('large.gif');
+  const buf = await fetchToBuffer('testdata/large.gif');
 
   const times = {};
   const log = async (method, fn) => {
