@@ -27,7 +27,9 @@ globalErr('Your browser doesn\'t have modules!')
 import * as fastgif from './fastgif.js';
 fastgif.setDebug();
 
-const src = 'testdata/large.gif';
+const opts = ['elves', 'hibiscus', 'large', 'rudolph', 'santa'];
+const choice = opts[~~(Math.random() * opts.length)];
+const src = `testdata/${choice}.gif`;
 
 if (!window.WebAssembly) {
   globalErr('Your browser doesn\'t have WebAssembly!')
@@ -65,6 +67,7 @@ async function render(all, label) {
 
 async function run() {
   const buf = await fetchToBuffer(src);
+  sizer.textContent = `gif size: ${buf.byteLength} bytes`;
 
   const times = {};
   const log = async (method, fn) => {
@@ -97,6 +100,7 @@ async function run() {
     const wasmDecoder = new fastgif.Decoder();
     return await wasmDecoder.decode(buf);
   });
+  sizer.textContent += ` (${wasmFrames.length} frames)`;
 
   // gifuct
   const gifuctFrames = await log('gifuct', async () => {
@@ -157,6 +161,10 @@ run().catch((err) => console.error(err));
     list-style: none;
     margin: 0;
   }
+  #sizer {
+    margin-bottom: 1em;
+  }
 </style>
+<div id="sizer"></div>
 <ul id="stats">Working...</ul>
 <span id="supergifHolder"></span>
